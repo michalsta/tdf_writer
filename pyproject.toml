@@ -1,0 +1,26 @@
+[build-system]
+requires = ["scikit-build-core", "nanobind"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "tdf_writer"
+version = "0.0.1"
+description = "Parallelized writer of TDF files"
+authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
+maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
+dependencies = ["numpy"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Development Status :: 4 - Beta",
+
+]
+keywords = []
+
+[project.urls]
+"Homepage" = "https://github.com/michalsta/tdf_writer"
+"Repository" = "https://github.com/michalsta/tdf_writer.git"
+
+[tool.scikit-build]
+sdist.exclude = [".github", ".gitignore", "tests"]
