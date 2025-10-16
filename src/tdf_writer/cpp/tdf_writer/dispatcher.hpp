@@ -1,3 +1,6 @@
+#ifndef TDF_WRITER_DISPATCHER_HPP
+#define TDF_WRITER_DISPATCHER_HPP
+
 #include <semaphore>
 #include <mutex>
 #include <thread>
@@ -9,7 +12,6 @@
 #include <stdexcept>
 
 #include "sync_buffer.hpp"
-#include "ordered_queue.hpp"
 
 
 template <typename Input_t, typename Output_t>
@@ -73,7 +75,7 @@ public:
                     if(!item.has_value()) break; // Buffer closed and empty
                     auto& [idx, input] = item.value();
                     IntermediateType intermediate = mapper->map(input);
-                    intermediate_queue.push(idx, intermediate);
+                    intermediate_queue.push({idx, std::move(intermediate)});
                 }
             });
         }
@@ -83,7 +85,7 @@ public:
             while(true) {
                 auto item = intermediate_queue.pop();
                 if(!item.has_value()) break; // Queue closed and empty
-                reducer->reduce(item.value());
+                reducer->reduce(item.value().second);
             }
         });
     }
@@ -111,10 +113,12 @@ public:
 
 private:
     SynchronizedBuffer<std::pair<size_t,InputType>> input_buffer;
-    OrderedQueue<IntermediateType> intermediate_queue;
+    SyncBoundedPriorityQueue<IntermediateType> intermediate_queue;
     std::unique_ptr<Mapper_t> mapper;
     std::unique_ptr<Reducer_t> reducer;
     std::vector<std::thread> mapper_threads;
     std::thread reducer_thread;
     size_t next_job_index = 0;
 };
+
+#endif // TDF_WRITER_DISPATCHER_HPP

@@ -1,11 +1,8 @@
-#include <semaphore>
-#include <mutex>
-#include <condition_variable>
-#include <queue>
-#include <tuple>
-#include <vector>
-#include <optional>
+#ifndef TDF_WRITER_ORDERED_QUEUE_HPP
+#define TDF_WRITER_ORDERED_QUEUE_HPP
 
+#include <queue>
+#include "sync_bouded_container.hpp"
 
 // A thread-safe priority queue that allows pushing items with an associated index
 // and popping them in order of their indices, guaranteeing that items are retrieved
@@ -13,58 +10,36 @@
 // Pop blocks if the next expected index is not available yet.
 
 template <typename T>
-class OrderedQueue
+class OrderedQueue : public SyncBoundedContainer<std::pair<size_t, T>>
 {
-    std::mutex mtx;
-    std::condition_variable cv;
-    using QueueItem = std::pair<size_t, T>; // (index, item)
     struct Compare {
-        bool operator()(const QueueItem& a, const QueueItem& b) {
-            return std::get<0>(a) > std::get<0>(b); // Min-heap based on index
+        bool operator()(const std::pair<size_t, T>& a, const std::pair<size_t, T>& b) const {
+            return a.first > b.first; // Min-heap based on the index
         }
     };
-    std::priority_queue<QueueItem, std::vector<QueueItem>, Compare> pq;
-    size_t next_index = 0; // Next expected index to pop
-    bool finished = false;
-public:
 
-    OrderedQueue() = default;
-    ~OrderedQueue() { close(); }
-
-    void push(size_t idx, const T& item)
+    std::priority_queue<std::pair<size_t, T>, std::vector<std::pair<size_t, T>>, Compare> pq;
+    size_t next_index = 0;
+    size_t max_size;
+protected:
+    inline void insert_into_container(std::pair<size_t, T>&& item) override
     {
-        std::unique_lock<std::mutex> lock(mtx);
-        pq.emplace(std::make_tuple(idx, item));
-        cv.notify_all();
+        pq.push(std::move(item));
     }
-
-    std::optional<T> pop()
+    inline std::pair<size_t, T> remove_from_container() override
     {
-        std::unique_lock<std::mutex> lock(mtx);
-        cv.wait(lock, [this]() { return (!pq.empty() && pq.top().first == next_index) || finished; });
-        if(finished && (pq.empty())) return std::nullopt;
-        T item = std::get<1>(pq.top());
+        std::pair<size_t, T> item = std::move(pq.top());
         pq.pop();
-        ++next_index;
-        cv.notify_all();
         return item;
     }
-
-    // Closes the queue. Wakes up all waiting threads. Wait until all items are popped.
-    void close()
+    inline bool container_is_full() const override
     {
-        std::unique_lock<std::mutex> lock(mtx);
-        finished = true;
-        cv.notify_all();
-        cv.wait(lock, [this]() { return pq.empty(); });
+        return pq.size() >= max_size;
     }
-
-    bool is_closed() const
+    inline bool container_is_empty() const override
     {
-        std::unique_lock<std::mutex> lock(mtx);
-        return finished;
+        return pq.empty() || pq.top().first != next_index;
     }
 };
 
-
-
+#endif // TDF_WRITER_ORDERED_QUEUE_HPP

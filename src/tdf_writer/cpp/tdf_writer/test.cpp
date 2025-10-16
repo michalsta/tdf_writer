@@ -1,4 +1,5 @@
 #include "dispatcher.hpp"
+#include "file_collector.hpp"
 
 #include <iostream>
 #include <chrono>
@@ -12,19 +13,22 @@
 class simpleTestDispatcher
 {
 public:
-    class simpleMapper : public Mapper<int, int>
+    class simpleMapper : public Mapper<int, SimpleBuffer<char>>
     {
     public:
-        int map(const int& input) override
+        SimpleBuffer<char> map(const int& input) override
         {
             auto sleep_duration = std::chrono::milliseconds(rand() % 100);
             std::cout << "Mapping: " << input << " (sleep " << sleep_duration.count() << " ms)" << std::endl;
             std::this_thread::sleep_for(sleep_duration);
-            return input;
+            std::vector<char> output;
+            output.push_back(static_cast<char>(input % 256));
+            SimpleBuffer<char> buffer(output.data(), output.size());
+            return std::move(buffer);
         }
     };
 
-    class simpleReducer : public Reducer<int>
+    /*class simpleReducer : public Reducer<int>
     {
         int counter = 0;
     public:
@@ -33,14 +37,14 @@ public:
             assert(input == counter++);
             std::cout << "Reduced: " << input << std::endl;
         }
-    };
+    };*/
 
     void run()
     {
         auto mapper = std::make_unique<simpleMapper>();
-        auto reducer = std::make_unique<simpleReducer>();
+        auto reducer = std::make_unique<FileCollector>("output.bin");
 
-        Dispatcher<simpleMapper, simpleReducer> dispatcher(std::move(mapper), std::move(reducer), 10, 100);
+        Dispatcher<simpleMapper, FileCollector> dispatcher(std::move(mapper), std::move(reducer), 10, 100);
 
 
         for(int i = 0; i < 1000; ++i) {
