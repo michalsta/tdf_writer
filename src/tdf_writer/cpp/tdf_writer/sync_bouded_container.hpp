@@ -75,54 +75,69 @@ public:
 
 
 template <typename T>
-class QueueElement
+class PriorityQueue
 {
-public:
-    size_t index;
-    T value;
-    QueueElement(size_t idx, T&& val) : index(idx), value(std::move(val)) {}
-    QueueElement(const QueueElement&) = delete;
-    QueueElement& operator=(const QueueElement&) = delete;
-    QueueElement(QueueElement&& other) noexcept : index(other.index), value(std::move(other.value)) {}
-    QueueElement& operator=(QueueElement&& other) noexcept
-    {
-        if(this != &other) {
-            index = other.index;
-            value = std::move(other.value);
+    struct ComparePair {
+        bool operator()(const std::pair<size_t, T>& a, const std::pair<size_t, T>& b) const
+        {
+            return a.first > b.first; // Min-heap based on the first element (priority)
         }
-        return *this;
+    };
+    std::priority_queue<std::pair<size_t, T>,
+                        std::vector<std::pair<size_t, T>>,
+                        ComparePair> pq;
+public:
+    PriorityQueue() = default;
+    ~PriorityQueue() = default;
+    void push(size_t priority, T&& item)
+    {
+        std::pair<size_t, T> p(priority, std::move(item));
+        pq.push(std::move(p));
     }
-    ~QueueElement() = default;
-    // Comparison operator for priority queue (min-heap by index)
-    bool operator>(const QueueElement<T>& other) const {
-        return index > other.index;
+    std::pair<size_t, T> pop()
+    {
+        auto item = std::move(const_cast<std::pair<size_t, T>&>(pq.top()));
+        pq.pop();
+        return item;
+    }
+    const std::pair<size_t, T>& top() const
+    {
+        return pq.top();
+    }
+    bool empty() const
+    {
+        return pq.empty();
+    }
+    size_t size() const
+    {
+        return pq.size();
     }
 };
+
 
 // A thread-safe priority queue that stores pairs of (index, value).
 // Items are pushed with an associated index and popped strictly in order of increasing index.
 // The queue blocks on pop if the next expected index is not available, ensuring no indices are skipped.
 template <typename T>
-class SyncBoundedPriorityQueue : public SyncBoundedContainer<QueueElement<T>>
+class SyncBoundedPriorityQueue : public SyncBoundedContainer<std::pair<size_t, T>>
 {
-    std::priority_queue<QueueElement<T>, std::vector<QueueElement<T>>, std::greater<QueueElement<T>>> pq;
+    using QueueElement = std::pair<size_t, T>;
+    PriorityQueue<T> pq;
     size_t next_index = 0;
     size_t max_size;
 
 protected:
     inline virtual void insert_into_container(std::pair<size_t, T>&& item) override
     {
-        pq.push(QueueElement<T>(item.first, std::move(item.second)));
+        pq.push(item.first, std::move(item.second));
     }
-    inline virtual QueueElement<T> remove_from_container() override
+    inline virtual std::pair<size_t, T> remove_from_container() override
     {
-        QueueElement<T> elem = std::move(pq.top());
-        pq.pop();
-        assert(elem.index == next_index);
+        assert(pq.top().first == next_index);
         ++next_index;
-        return {elem.index, std::move(elem.value)};
+        return pq.pop();
     }
-    inline virtual bool container_can_accept(const QueueElement& item) const override
+    inline virtual bool container_can_accept(const std::pair<size_t, T>& item) const override
     {
         return pq.size() < max_size || item.first < pq.top().first;
     }
